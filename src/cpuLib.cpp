@@ -93,9 +93,13 @@ int runCpuSaxpy(uint64_t vectorSize) {
 		printf(" ... }\n");
 	#endif
 
+	auto tStart = std::chrono::high_resolution_clock::now();
 	//	C = A + B
 	saxpy_cpu(a, c, scale, vectorSize);
+	auto tEnd= std::chrono::high_resolution_clock::now();
 
+	std::chrono::duration<double> time_span = (tEnd- tStart);
+	std::cout << "It took " << time_span.count() << " seconds. \n";
 	#ifndef DEBUG_PRINT_DISABLE 
 		printf(" c = { ");
 		for (int i = 0; i < 5; ++i) {

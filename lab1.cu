@@ -13,10 +13,22 @@
 #include "lab1.cuh"
 #include "cpuLib.h"
 #include "cudaLib.cuh"
+#include <cuda_runtime.h>
+#include <stdio.h>
 
 int main(int argc, char** argv) {
 	std::string str;
 	int choice;
+
+	cudaDeviceProp prop;
+  	int device;
+
+  	cudaGetDevice(&device);
+  	cudaGetDeviceProperties(&prop, device);
+
+  	printf("Maximum number of threads per block: %d\n", prop.maxThreadsPerBlock);
+  	printf("Maximum number of threads per multiprocessor: %d\n", prop.maxThreadsPerMultiProcessor);
+  	printf("Number of streaming multiprocessors: %d\n", prop.multiProcessorCount);
 
 	std::cout << "ECE 695 - Lab 1 \n";
 	std::cout << "Select application: \n";
