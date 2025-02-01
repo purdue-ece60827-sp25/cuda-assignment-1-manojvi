@@ -26,8 +26,9 @@ void saxpy_gpu (float* x, float* y, float scale, int size) {
 
 int runGpuSaxpy(int vectorSize) {
 
-	dim3 gridDim(1024, 1, 1);  // 30 blocks in the x-dimension
-	dim3 blockDim((vectorSize + 1023)/1024, 1, 1); // 1024 threads in the x-dimension
+	int blocks = (vectorSize + 1023) / 1024;
+	dim3 gridDim(blocks, 1, 1);  // Calculate blocks based on vector size
+	dim3 blockDim(1024, 1, 1); // 1024 threads in the x-dimension
 	std::cout << "Hello GPU Saxpy!\n";
 	int numDev = 0;
 	gpuAssert(cudaGetDeviceCount(&numDev), __FILE__, __LINE__, true);
@@ -95,7 +96,7 @@ void generatePoints (uint64_t * pSums, uint64_t pSumSize, uint64_t sampleSize) {
 	if(idx < pSumSize) {
 		uint64_t count = 0;
 		curandState state;
-        curand_init(1234, idx, 0, &state);
+        	curand_init(clock64(), idx, 0, &state);
 		for (uint64_t i = 0; i < sampleSize; i++) {
 			float x = (float)curand_uniform(&state);
 			float y = (float)curand_uniform(&state);
@@ -109,13 +110,15 @@ void generatePoints (uint64_t * pSums, uint64_t pSumSize, uint64_t sampleSize) {
 
 
 __global__ 
-void reduceCounts (uint64_t * pSums, uint64_t * totals, uint64_t pSumSize, uint64_t reduceSize) {
+void reduceCounts (uint64_t * pSums, uint64_t * totals, uint64_t pSumSize, uint64_t reduceSize, uint64_t pSumSizeTotal) {
 	//	Insert code here
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < pSumSize) {
 		uint64_t sum = 0;
 		for (uint64_t i = 0; i < reduceSize; i++) {
-			sum += pSums[idx * reduceSize + i];
+			uint64_t acc_idx = idx * reduceSize + i;
+			if (acc_idx < pSumSizeTotal)	
+				sum += pSums[acc_idx];
 		}
 		totals[idx] = sum;
 	}
@@ -153,22 +156,23 @@ double estimatePi(uint64_t generateThreadCount, uint64_t sampleSize,
 	uint64_t reduceThreadCount, uint64_t reduceSize) {
 	
 	double approxPi = 0;
+	int blocks = (generateThreadCount + 1023) / 1024;
+	dim3 gridDim(blocks, 1, 1);  // Calculate blocks based on vector size
+	dim3 blockDim(1024, 1, 1); // 1024 threads in the x-dimension
 	// Generate points
-	uint64_t * pSums, * totals, * dev_pSums, * dev_totals;
+	uint64_t * pSums, * totals, * dev_totals;
 	uint64_t pSumSize = generateThreadCount;
 	uint64_t totalSize = reduceThreadCount;
-	dev_totals = (uint64_t *) malloc(totalSize * sizeof(uint64_t));
+	dev_totals = (uint64_t *) malloc(totalSize* sizeof(uint64_t));
 	cudaMalloc((void **) &pSums, pSumSize * sampleSize * sizeof(uint64_t));
 	cudaMalloc((void **) &totals, totalSize * sizeof(uint64_t));
-	generatePoints<<<generateThreadCount, 1>>>(pSums, pSumSize, sampleSize);
-	
-
-	reduceCounts<<<reduceThreadCount, 1>>>(pSums, totals, pSumSize, reduceSize);
+	generatePoints<<<gridDim, blockDim>>>(pSums, pSumSize, sampleSize);
+	blocks = (reduceThreadCount + 1023) / 1024;
+	dim3 gridDim_2(blocks, 1, 1);
+	reduceCounts<<<gridDim_2, blockDim>>>(pSums, totals, pSumSize, reduceSize, pSumSize*sampleSize);
 	
 	cudaMemcpy(dev_totals, totals, totalSize * sizeof(uint64_t), cudaMemcpyDeviceToHost);
 	approxPi = 4.0*((double)dev_totals[0]/(double)(reduceSize*sampleSize));
-	//      Insert code here
-	std::cout << " dev_totals[0]..." << dev_totals[0] << "\n";
-	//std::cout << "Compute pi, you must!\n";
 	return approxPi;
 }
+
